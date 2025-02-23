@@ -3,12 +3,13 @@ import glob
 import platform
 import numpy as np
 import sounddevice as sd
+import soundfile as sf
 import serial
 from PyQt5 import QtWidgets, QtCore, QtGui
 import pyqtgraph as pg
 from scipy.signal import spectrogram
 
-# custom color palette
+# Custom color palette
 COLORS = {
     'dark': '#1a1a1a',
     'darker': '#121212',
@@ -25,12 +26,13 @@ class AudioGUI(QtWidgets.QMainWindow):
         self.serial_port = None
         self.audio_buffer = np.zeros(44100, dtype=np.int16)
         self.recording = False
+        self.vu_level = 0.0
         self.recorded_audio = []
+        self.status_bar = self.statusBar()
         self.init_serial()
         self.init_ui()
         self.init_audio_processing()
         self.setup_styles()
-        self.status_bar = self.statusBar()
 
     def setup_styles(self):
         self.setStyleSheet(f"""
@@ -45,6 +47,7 @@ class AudioGUI(QtWidgets.QMainWindow):
                 font: bold 12pt Arial;
             }}
             QPushButton:hover {{ background-color: {COLORS['accent']}; color: black; }}
+            QPushButton:pressed {{ border: 2px solid white; }}
             QSlider::groove:horizontal {{
                 background: {COLORS['darker']};
                 height: 10px;
@@ -58,31 +61,34 @@ class AudioGUI(QtWidgets.QMainWindow):
             }}
             QSlider::sub-page:horizontal {{ background: {COLORS['accent']}; }}
         """)
+
     def init_serial(self):
-            port_pattern = {
-                'Windows': 'COM*',
-                'Darwin': '/dev/tty.usbmodem*',
-                'Linux': '/dev/ttyACM*'
-            }[platform.system()]
-            
-            ports = glob.glob(port_pattern)
-            print(f"Available ports: {ports}")
-            
-            for port in ports:
-                try:
-                    self.serial_port = serial.Serial(
-                        port, 
-                        921600,
-                        timeout=0,
-                        write_timeout=1
-                    )
-                    print(f"Connected to {port}")
-                    return
-                except serial.SerialException as e:
-                    print(f"Failed to connect to {port}: {str(e)}")
-            
-            print("No valid Teensy port found!")
-            self.serial_port = None
+        port_pattern = {
+            'Windows': 'COM*',
+            'Darwin': '/dev/tty.usbmodem*',
+            'Linux': '/dev/ttyACM*'
+        }[platform.system()]
+        
+        ports = glob.glob(port_pattern)
+        print(f"Available ports: {ports}")
+        
+        for port in ports:
+            try:
+                self.serial_port = serial.Serial(
+                    port, 
+                    921600,
+                    timeout=0,
+                    write_timeout=1
+                )
+                print(f"Connected to {port}")
+                self.status_bar.showMessage(f"Connected to {port}", 5000)
+                return
+            except serial.SerialException as e:
+                print(f"Failed to connect to {port}: {str(e)}")
+        
+        print("No valid Teensy port found!")
+        self.serial_port = None
+        self.status_bar.showMessage("No Teensy detected!", 5000)
 
     def init_ui(self):
         self.setWindowTitle("Teensy Pitch Shifter - Audio Processor")
@@ -197,16 +203,13 @@ class AudioGUI(QtWidgets.QMainWindow):
         self.timer.timeout.connect(self.update_plots)
         self.timer.start(50)
 
-        # Configure plot aesthetics
         self.configure_plots()
 
     def configure_plots(self):
-        # Waveform plot styling
         self.waveform_plot.setBackground(COLORS['plot_bg'])
         self.waveform_plot.getAxis('left').setPen(COLORS['text'])
         self.waveform_plot.getAxis('bottom').setPen(COLORS['text'])
         
-        # Spectrogram plot styling
         self.spectrogram_plot.setBackground(COLORS['plot_bg'])
         self.spectrogram_image.setLookupTable(self.create_colormap())
         self.spectrogram_plot.getAxis('left').setPen(COLORS['text'])
@@ -229,58 +232,86 @@ class AudioGUI(QtWidgets.QMainWindow):
         self.t_spec = np.arange(100)
 
     def update_plots(self):
-        # Update waveform
-        self.waveform_curve.setData(self.audio_buffer[-1000:])
-        
-        # Update spectrogram
-        f, t, Sxx = spectrogram(self.audio_buffer, fs=44100, nperseg=1024)
-        self.spectrogram_image.setImage(Sxx[::4, ::2], autoLevels=False)
-        
-        # Update VU meter
-        current_level = np.abs(self.audio_buffer[-1000:]).mean() * 2
-        self.vu_meter.setValue(int(np.clip(current_level, 0, 100)))
+        try:
+            # Update VU meter using peak detection
+            current_peak = np.max(np.abs(self.audio_buffer[-1000:])) / 32768.0
+            self.vu_meter.setValue(int(current_peak * 100))
+            
+            # Update waveform
+            self.waveform_curve.setData(self.audio_buffer[-1000:])
+            
+            # Update spectrogram
+            f, t, Sxx = spectrogram(self.audio_buffer, fs=44100, nperseg=1024)
+            if Sxx.size > 0:
+                db_scale = 10 * np.log10(Sxx[::4, ::2] + 1e-12)
+                self.spectrogram_image.setImage(db_scale.T, levels=(-40, 40))
+        except Exception as e:
+            print(f"Plotting error: {str(e)}")
 
     def update_pitch(self):
         factor = self.pitch_slider.value() / 100.0
         self.pitch_display.display(factor)
-        self.send_command(f"PITCH {factor}")
+        self.send_command(f"PITCH {factor:.2f}")
 
     def handle_preset(self):
-        sender = self.sender().text()
-        if sender == 'Low Voice':
+        btn = self.sender()
+        text = btn.text()
+        
+        # Visual feedback
+        original_color = btn.palette().color(btn.backgroundRole()).name()
+        btn.setStyleSheet(f"background-color: white; color: black;")
+        QtCore.QTimer.singleShot(200, lambda: btn.setStyleSheet(f"background-color: {original_color}; color: black;"))
+        
+        if self.serial_port:
+            self.serial_port.reset_input_buffer()
+            self.serial_port.reset_output_buffer()
+            
+        if text == 'Low Voice':
             self.send_command("PITCH 0.5")
-        elif sender == 'High Voice':
+            self.pitch_slider.setValue(50)
+        elif text == 'High Voice':
             self.send_command("PITCH 2.0")
-        elif sender == 'Robot':
+            self.pitch_slider.setValue(200)
+        elif text == 'Robot':
             self.send_command("ROBOT 1.0")
-        elif sender == 'Reset':
+        elif text == 'Reset':
             self.send_command("RESET")
+            self.pitch_slider.setValue(100)
 
     def toggle_recording(self):
         self.recording = not self.recording
-        self.record_btn.setText("Stop" if self.recording else "Record")
-        if not self.recording:
-            sd.write(np.concatenate(self.recorded_audio), 44100)
+        self.record_btn.setText("⏹ Stop" if self.recording else "⏺ Record")
+        if not self.recording and len(self.recorded_audio) > 0:
+            full_recording = np.concatenate(self.recorded_audio)
+            sf.write('recording.wav', full_recording, 44100)
+            self.recorded_audio = []
 
     def play_recording(self):
+        if self.recording:
+            self.recording = False
+            self.record_btn.setText("⏺ Record")
+            
         if len(self.recorded_audio) > 0:
-            sd.play(np.concatenate(self.recorded_audio), 44100)
+            full_recording = np.concatenate(self.recorded_audio)
+            sd.play(full_recording, 44100)
 
     def send_command(self, cmd):
         if self.serial_port:
-            self.serial_port.write(f"{cmd}\n".encode())
+            try:
+                self.serial_port.write(f"{cmd}\n".encode())
+                self.serial_port.flush()
+            except Exception as e:
+                print(f"Send error: {str(e)}")
+                self.status_bar.showMessage("Connection lost!", 5000)
+                self.serial_port = None
 
     def read_serial(self):
         try:
             if self.serial_port and self.serial_port.in_waiting:
-                print(f"Bytes waiting: {self.serial_port.in_waiting}")
-                # Read all available bytes
                 data = self.serial_port.read(self.serial_port.in_waiting)
-                print(f"Received {len(data)} bytes")
                 
-                # Ensure we have even number of bytes for int16 conversion
                 if len(data) % 2 != 0:
-                    data = data[:-1]  # Drop last byte if odd count
+                    data = data[:-1]
                     
                 if len(data) >= 2:
                     audio = np.frombuffer(data, dtype=np.int16)
@@ -290,19 +321,14 @@ class AudioGUI(QtWidgets.QMainWindow):
                     if self.recording:
                         self.recorded_audio.append(audio.copy())
         except Exception as e:
-            print(f"Serial read error: {str(e)}")
-        finally:
-                pass
+            print(f"Serial error: {str(e)}")
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
-    app.setWindowIcon(QtGui.QIcon('icon.png'))  # Add your own icon
     gui = AudioGUI()
     gui.show()
     
-    # Serial reading timer
     serial_timer = QtCore.QTimer()
     serial_timer.timeout.connect(gui.read_serial)
     serial_timer.start(10)
-
     sys.exit(app.exec_())
