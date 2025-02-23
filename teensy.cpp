@@ -59,16 +59,19 @@ void loop() {
 void handleCommand(String cmd) {
     if (cmd.startsWith("PITCH")) {
         pitchFactor = cmd.substring(6).toFloat();
-        granular.setSpeed(pitchFactor);
+        granular.setSpeed(pitchFactor); 
     }
     else if (cmd.startsWith("ROBOT")) {
         robotAmount = cmd.substring(6).toFloat();
-        granular.setGranularParameters(50, 100, robotAmount * 50);
+        
+        // Simulate robotization using pitch shift with grain size
+        float grainSize = 50 + (robotAmount * 50);  
+        granular.beginPitchShift(grainSize);
     }
     else if (cmd == "RESET") {
         pitchFactor = 1.0;
         robotAmount = 0.0;
         granular.setSpeed(1.0);
-        granular.setGranularParameters(50, 100, 0);
+        granular.stop();  // Stop granular processing to reset
     }
 }
