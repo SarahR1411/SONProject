@@ -1,7 +1,6 @@
 #include <Audio.h>
 #include <Wire.h>
 #include <SPI.h>
-#include <SD.h>
 #include <SerialFlash.h>
 
 #define GRANULAR_MEMORY_SIZE 12800
@@ -37,19 +36,18 @@ void setup() {
     audioShield.volume(0.5);
     
     granular.begin(granularMemory, GRANULAR_MEMORY_SIZE);
-    granular.beginPitchShift(1.0);
+    granular.beginPitchShift(50.0);  // CORRECTED - 50ms grain size
+    granular.setSpeed(1.0);          // Explicit speed set
     audioQueue.begin();
 }
 
 void loop() {
-    // Send audio data to GUI
     if (audioQueue.available() >= 1) {
         int16_t *buffer = audioQueue.readBuffer();
         Serial.write((uint8_t*)buffer, audioBlockSize * sizeof(int16_t));
         audioQueue.freeBuffer();
     }
 
-    // Receive commands from GUI
     if (Serial.available()) {
         String cmd = Serial.readStringUntil('\n');
         handleCommand(cmd);
@@ -63,15 +61,13 @@ void handleCommand(String cmd) {
     }
     else if (cmd.startsWith("ROBOT")) {
         robotAmount = cmd.substring(6).toFloat();
-        
-        // Simulate robotization using pitch shift with grain size
-        float grainSize = 50 + (robotAmount * 50);  
+        float grainSize = 50 + (robotAmount * 50);
         granular.beginPitchShift(grainSize);
     }
     else if (cmd == "RESET") {
         pitchFactor = 1.0;
         robotAmount = 0.0;
         granular.setSpeed(1.0);
-        granular.stop();  // Stop granular processing to reset
+        granular.beginPitchShift(50.0);  // Reset to normal grain size
     }
 }

@@ -5,6 +5,7 @@ import numpy as np
 import sounddevice as sd
 import soundfile as sf
 import serial
+import time  # Added for timestamp
 from PyQt5 import QtWidgets, QtCore, QtGui
 import pyqtgraph as pg
 from scipy.signal import spectrogram
@@ -28,6 +29,7 @@ class AudioGUI(QtWidgets.QMainWindow):
         self.recording = False
         self.vu_level = 0.0
         self.recorded_audio = []
+        self.last_recording = None  # Store last recording
         self.status_bar = self.statusBar()
         self.init_serial()
         self.init_ui()
@@ -151,7 +153,6 @@ class AudioGUI(QtWidgets.QMainWindow):
         presets = [
             ('Low Voice', '#ff4444'), 
             ('High Voice', '#44ff44'), 
-            ('Robot', '#4444ff'), 
             ('Reset', COLORS['accent'])
         ]
         
@@ -272,8 +273,6 @@ class AudioGUI(QtWidgets.QMainWindow):
         elif text == 'High Voice':
             self.send_command("PITCH 2.0")
             self.pitch_slider.setValue(200)
-        elif text == 'Robot':
-            self.send_command("ROBOT 1.0")
         elif text == 'Reset':
             self.send_command("RESET")
             self.pitch_slider.setValue(100)
@@ -283,17 +282,22 @@ class AudioGUI(QtWidgets.QMainWindow):
         self.record_btn.setText("⏹ Stop" if self.recording else "⏺ Record")
         if not self.recording and len(self.recorded_audio) > 0:
             full_recording = np.concatenate(self.recorded_audio)
-            sf.write('recording.wav', full_recording, 44100)
+            timestamp = int(time.time())
+            filename = f'recording_{timestamp}.wav'
+            sf.write(filename, full_recording, 44100)
+            self.last_recording = full_recording
             self.recorded_audio = []
+            self.status_bar.showMessage(f"Saved as {filename}", 5000)
 
     def play_recording(self):
         if self.recording:
             self.recording = False
             self.record_btn.setText("⏺ Record")
             
-        if len(self.recorded_audio) > 0:
-            full_recording = np.concatenate(self.recorded_audio)
-            sd.play(full_recording, 44100)
+        if self.last_recording is not None:
+            sd.play(self.last_recording, 44100)
+        else:
+            self.status_bar.showMessage("No recording available", 3000)
 
     def send_command(self, cmd):
         if self.serial_port:
