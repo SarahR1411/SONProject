@@ -47,4 +47,50 @@ In our teensy.cpp code, pitch modulation is achieved primarily through the use o
 
 
 ## Graphical Interface Explained 
+The Graphical User Interface (GUI) for the Teensy Pitch Shifter is built using PyQt5 and pyqtgraph, providing real-time visualization and interaction for audio manipulation. The interface is divided into several sections for controlling pitch, viewing visualizations, and interacting with recordings. Below is an overview of the GUI components:
 
+### Live Visualizations Section
+This section provides real-time graphical feedback of the audio being processed:
+
+Waveform Plot: Displays the audio signal in the time domain. The waveform plot allows users to see the amplitude of the signal over time, offering a visual representation of the audio's structure.
+Label: "Live Waveform"
+Axis Labels: "Amplitude" (y-axis), "Time (samples)" (x-axis)
+Spectrogram Plot: Visualizes the audio's frequency content over time using a spectrogram. This is especially useful for observing how the frequency characteristics of the audio evolve.
+Label: "Live Spectrogram"
+Axis Labels: "Frequency (Hz)" (y-axis), "Time (s)" (x-axis)
+These visualizations update in real-time based on the processed audio data.
+
+### Processing Controls
+The control panel section contains various controls for adjusting pitch and applying audio effects.
+
+Pitch Control:
+A horizontal slider (range 50 - 200) allows the user to modify the pitch factor of the audio.
+The Pitch Factor is displayed in a QLCDNumber widget, showing the current pitch multiplier (e.g., 1.0 for normal pitch, 2.0 for doubling the pitch).
+Pitch Slider: Changes the pitch factor.
+The GUI sends the updated pitch value to the Teensy when adjusted.
+Presets:
+A set of buttons that apply predefined pitch shifts for specific effects, such as 'Low Voice', 'High Voice', and 'Reset'.
+When pressed, these buttons change the pitch factor and update the display accordingly.
+This feature allows for quick switching between preset pitch effects.
+
+### Recording Controls
+Record Button: Starts or stops audio recording. The recorded audio is saved as a .wav file when stopped, and the filename is displayed in the status bar.
+Play Button: Plays back the most recent recording if available. If no recording exists, a message is displayed indicating so.
+
+### VU Meter (Volume Unit Meter)
+The VU Meter is a progress bar that displays the input audio level as a percentage (0-100). The meter is updated in real-time to give visual feedback of the current amplitude.
+
+### Serial Communication and Teensy Integration
+The GUI communicates with the Teensy over a serial connection. Commands like "PITCH <value>" or "RESET" are sent to the Teensy via the serial port, which adjusts the pitch of the audio being processed.
+The serial port is automatically detected based on the operating system, and the GUI attempts to connect to the correct device.
+Custom Styles & User Interface Design
+The interface uses a custom color palette to create a sleek, dark-themed design. The buttons and controls are designed to have smooth hover and press effects, offering a polished user experience.
+The pitch control section includes a slider with a color change when interacted with, and the presets have a quick feedback feature when clicked.
+
+### Summary of Key Features
+ - Real-time waveform and spectrogram visualizations for monitoring the audio signal.
+ - Pitch control slider with an LCD display showing the pitch factor.
+ - Preset buttons for applying quick pitch modifications.
+ - Recording and playback functionality for capturing and reviewing audio.
+ - VU Meter to visualize audio levels.
+ - Stylish and interactive design for ease of use.
