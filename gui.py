@@ -30,6 +30,7 @@ class AudioGUI(QtWidgets.QMainWindow):
         self.vu_level = 0.0
         self.recorded_audio = []
         self.last_recording = None  # Store last recording
+        self.reverb_mix = 0.0
         self.status_bar = self.statusBar()
         self.init_serial()
         self.init_ui()
@@ -93,26 +94,26 @@ class AudioGUI(QtWidgets.QMainWindow):
         self.status_bar.showMessage("No Teensy detected!", 5000)
 
     def init_ui(self):
-        self.setWindowTitle("Teensy Pitch Shifter - Audio Processor")
+        self.setWindowTitle("Teensy Audio Processor")
         self.setGeometry(100, 100, 1000, 800)
 
-        # Main widget and layout
         central_widget = QtWidgets.QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QtWidgets.QVBoxLayout(central_widget)
+        main_layout.setContentsMargins(10, 10, 10, 10)
+        main_layout.setSpacing(15)
 
         # Visualization Section
         vis_group = QtWidgets.QGroupBox("Live Visualizations")
         vis_layout = QtWidgets.QVBoxLayout()
+        vis_layout.setContentsMargins(5, 15, 5, 5)
         
-        # Waveform plot with title
         self.waveform_plot = pg.PlotWidget(title="Live Waveform")
         self.waveform_plot.setLabel('left', 'Amplitude')
         self.waveform_plot.setLabel('bottom', 'Time (samples)')
         self.waveform_curve = self.waveform_plot.plot(pen=pg.mkPen(COLORS['waveform'], width=2))
         vis_layout.addWidget(self.waveform_plot)
 
-        # Spectrogram plot with title
         self.spectrogram_plot = pg.PlotWidget(title="Live Spectrogram")
         self.spectrogram_plot.setLabel('left', 'Frequency (Hz)')
         self.spectrogram_plot.setLabel('bottom', 'Time (s)')
@@ -125,62 +126,65 @@ class AudioGUI(QtWidgets.QMainWindow):
         # Control Panel
         control_group = QtWidgets.QGroupBox("Processing Controls")
         control_layout = QtWidgets.QGridLayout()
+        control_layout.setVerticalSpacing(15)
+        control_layout.setHorizontalSpacing(20)
 
         # Pitch Control
         pitch_control = QtWidgets.QGroupBox("Pitch Control")
         pitch_layout = QtWidgets.QVBoxLayout()
-        
         self.pitch_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
         self.pitch_slider.setRange(50, 200)
         self.pitch_slider.valueChanged.connect(self.update_pitch)
-        
         self.pitch_display = QtWidgets.QLCDNumber()
         self.pitch_display.setDigitCount(5)
-        self.pitch_display.setSegmentStyle(QtWidgets.QLCDNumber.Filled)
-        self.pitch_display.display(1.00)
-        
         pitch_layout.addWidget(QtWidgets.QLabel("Pitch Factor (0.5x - 2.0x):"))
         pitch_layout.addWidget(self.pitch_slider)
         pitch_layout.addWidget(self.pitch_display)
         pitch_control.setLayout(pitch_layout)
         control_layout.addWidget(pitch_control, 0, 0, 1, 2)
 
+        # Reverb Control
+        reverb_control = QtWidgets.QGroupBox("Reverb Control")
+        reverb_layout = QtWidgets.QVBoxLayout()
+        self.reverb_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        self.reverb_slider.setRange(0, 100)
+        self.reverb_slider.valueChanged.connect(self.update_reverb)
+        self.reverb_display = QtWidgets.QLCDNumber()
+        self.reverb_display.setDigitCount(5)
+        reverb_layout.addWidget(QtWidgets.QLabel("Reverb Mix (0% - 100%):"))
+        reverb_layout.addWidget(self.reverb_slider)
+        reverb_layout.addWidget(self.reverb_display)
+        reverb_control.setLayout(reverb_layout)
+        control_layout.addWidget(reverb_control, 1, 0, 1, 2)
+
         # Presets
         presets_group = QtWidgets.QGroupBox("Presets")
         presets_layout = QtWidgets.QHBoxLayout()
-        
         self.buttons = {}
-        presets = [
-            ('Low Voice', '#ff4444'), 
-            ('High Voice', '#44ff44'), 
-            ('Reset', COLORS['accent'])
-        ]
-        
+        presets = [('Low Voice', '#ff4444'), ('High Voice', '#44ff44'), ('Reset', COLORS['accent'])]
         for text, color in presets:
             btn = QtWidgets.QPushButton(text)
             btn.setStyleSheet(f"background-color: {color}; color: black;")
             btn.clicked.connect(self.handle_preset)
             presets_layout.addWidget(btn)
             self.buttons[text] = btn
-        
         presets_group.setLayout(presets_layout)
-        control_layout.addWidget(presets_group, 1, 0, 1, 2)
+        control_layout.addWidget(presets_group, 2, 0, 1, 2)
 
         # Recording Controls
         rec_group = QtWidgets.QGroupBox("Recording")
         rec_layout = QtWidgets.QHBoxLayout()
-        
         self.record_btn = QtWidgets.QPushButton("⏺ Record")
         self.play_btn = QtWidgets.QPushButton("⏵ Play")
         self.record_btn.clicked.connect(self.toggle_recording)
         self.play_btn.clicked.connect(self.play_recording)
-        
         rec_layout.addWidget(self.record_btn)
         rec_layout.addWidget(self.play_btn)
         rec_group.setLayout(rec_layout)
-        control_layout.addWidget(rec_group, 2, 0, 1, 2)
+        control_layout.addWidget(rec_group, 3, 0, 1, 2)
 
         # VU Meter
+        control_layout.addWidget(QtWidgets.QLabel("Input Level:"), 4, 0)
         self.vu_meter = QtWidgets.QProgressBar()
         self.vu_meter.setRange(0, 100)
         self.vu_meter.setTextVisible(False)
@@ -193,18 +197,20 @@ class AudioGUI(QtWidgets.QMainWindow):
             }}
             QProgressBar::chunk {{ background-color: {COLORS['accent']}; }}
         """)
-        control_layout.addWidget(QtWidgets.QLabel("Input Level:"), 3, 0)
-        control_layout.addWidget(self.vu_meter, 3, 1)
+        control_layout.addWidget(self.vu_meter, 4, 1)
 
         control_group.setLayout(control_layout)
         main_layout.addWidget(control_group)
 
-        # Timer for updates
+        # Timer setup
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.update_plots)
         self.timer.start(50)
 
         self.configure_plots()
+        QtCore.QTimer.singleShot(100, self.read_serial)
+
+ 
 
     def configure_plots(self):
         self.waveform_plot.setBackground(COLORS['plot_bg'])
@@ -253,6 +259,11 @@ class AudioGUI(QtWidgets.QMainWindow):
         factor = self.pitch_slider.value() / 100.0
         self.pitch_display.display(factor)
         self.send_command(f"PITCH {factor:.2f}")
+    
+    def update_reverb(self):
+        mix = self.reverb_slider.value()/100.0
+        self.reverb_display.display(mix)
+        self.send_command(f"REVERB {mix:.2f}")
 
     def handle_preset(self):
         btn = self.sender()
