@@ -22,10 +22,28 @@ First we needed to import the Audio.h library as it allows to handle audio signa
 When implementing this we kept the same trope, however, didn't implement SOLA directly because best window placement searching using an error-minimization strategy (as it is the case with WSOLA/SOLA) is computationally expensive and impractical for real-time execution on Teensy. 
 
 In our teensy.cpp code, pitch modulation is achieved primarily through the use of the granular.setSpeed(pitchFactor) function and the granular.beginPitchShift(grainSize) function, which are part of the granular synthesis process:
-        -`AudioEffectGranula` object to perform granular synthesis, which involves breaking up an audio signal into small "grains" (tiny segments of audio), and then manipulating those grains in various ways, such as altering their pitch, speed, and position.
-        -`granular.setSpeed(pitchFactor)`function allows you to modify the playback speed of the granular grains. The pitchFactor variable controls this speed, and thus the pitch. When pitchFactor is greater than 1.0, the grains play faster (raising the pitch), and when pitchFactor is less than 1.0, the grains play slower (lowering the pitch). This is the main mechanism for pitch modulation.
-        -`granular.beginPitchShift(grainSize` function is used in the "ROBOT" command section of the code. This function allows the pitch shift to be simulated by adjusting the size of the grains. By manipulating the robotAmount (which is a parameter controlled via a GUI), the grain size is changed, affecting the texture of the sound and adding a "robotic" effect. A smaller grain size typically results in a more robotic, jittery sound.
-        -`handleCommand()` function listens for specific commands ("PITCH", "ROBOT", "RESET") sent from the GUI. When the "PITCH" command is received, it updates the pitchFactor and adjusts the speed of the granular effect, effectively modulating the pitch. When the "ROBOT" command is received, the grain size is adjusted to simulate a robotic sound by modifying the pitch shift behavior. 
+1. **Granular Synthesis**:  
+   - The audio is processed using granular synthesis, where the signal is broken into small "grains" of audio.  
+   - These grains can be manipulated by changing their playback characteristics, such as pitch and speed.
+
+2. **Speed Control for Pitch**:  
+   - The `granular.setSpeed(pitchFactor)` function controls the speed of the granular effect.  
+   - The `pitchFactor` variable is used to adjust the speed:  
+     - A `pitchFactor > 1.0` increases the speed and raises the pitch.  
+     - A `pitchFactor < 1.0` decreases the speed and lowers the pitch.  
+   - This is the primary method for pitch modulation in the system.
+
+3. **Robot Effect (Pitch Shifting)**:  
+   - The `granular.beginPitchShift(grainSize)` function modifies the pitch shifting based on the size of the grains.  
+   - When the `robotAmount` variable is changed, the grain size is adjusted:  
+     - A smaller grain size results in a more robotic, jittery sound.  
+     - The `robotAmount` is controlled through the GUI.
+
+4. **Command Handling for Pitch Modulation**:  
+   - The `handleCommand()` function listens for commands from the GUI to adjust pitch modulation:  
+     - `"PITCH <value>"`: Updates the `pitchFactor` to modify the speed and pitch.  
+     - `"ROBOT <value>"`: Adjusts the `robotAmount` to control the grain size, simulating a robotic sound.
+     - `"RESET"`: Resets all parameters, restoring the default pitch (factor = 1.0).
 
 
 ## Graphical Interface Explained 
