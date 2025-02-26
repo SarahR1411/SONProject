@@ -5,7 +5,7 @@ import numpy as np
 import sounddevice as sd
 import soundfile as sf
 import serial
-import time  # Added for timestamp
+import time  
 from PyQt5 import QtWidgets, QtCore, QtGui
 import pyqtgraph as pg
 from scipy.signal import spectrogram
@@ -66,15 +66,17 @@ class AudioGUI(QtWidgets.QMainWindow):
         """)
 
     def init_serial(self):
+        # detect the teensy port based on the OS
         port_pattern = {
             'Windows': 'COM*',
             'Darwin': '/dev/tty.usbmodem*',
             'Linux': '/dev/ttyACM*'
         }[platform.system()]
         
-        ports = glob.glob(port_pattern)
+        ports = glob.glob(port_pattern) # scan for a matching port
         print(f"Available ports: {ports}")
         
+        #try to connect to each port
         for port in ports:
             try:
                 self.serial_port = serial.Serial(
@@ -117,8 +119,8 @@ class AudioGUI(QtWidgets.QMainWindow):
         self.spectrogram_plot = pg.PlotWidget(title="Live Spectrogram")
         self.spectrogram_plot.setLabel('left', 'Frequency (Hz)')
         self.spectrogram_plot.setLabel('bottom', 'Time (s)')
-        self.spectrogram_image = pg.ImageItem()
-        self.spectrogram_plot.addItem(self.spectrogram_image)
+        self.spectrogram_image = pg.ImageItem() # creates an image object for he spectrogram
+        self.spectrogram_plot.addItem(self.spectrogram_image) # attaches the image to the plot
         vis_layout.addWidget(self.spectrogram_plot)
         vis_group.setLayout(vis_layout)
         main_layout.addWidget(vis_group)
@@ -202,7 +204,7 @@ class AudioGUI(QtWidgets.QMainWindow):
         control_group.setLayout(control_layout)
         main_layout.addWidget(control_group)
 
-        # Timer setup
+        # Timer setup : to update the plots every 50 ms
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.update_plots)
         self.timer.start(50)
@@ -223,6 +225,7 @@ class AudioGUI(QtWidgets.QMainWindow):
         self.spectrogram_plot.getAxis('bottom').setPen(COLORS['text'])
 
     def create_colormap(self):
+        # colormap is used to visually differentiate the frequency magnitudes in the spectrogram
         colors = [
             (0, 0, 0),
             (0, 0, 255),
@@ -235,7 +238,7 @@ class AudioGUI(QtWidgets.QMainWindow):
 
     def init_audio_processing(self):
         self.spectrogram_data = np.zeros((100, 100))
-        self.freqs = np.fft.rfftfreq(1024, 1/44100)
+        self.freqs = np.fft.rfftfreq(1024, 1/44100) # convert time domain signal to frequency domain
         self.t_spec = np.arange(100)
 
     def update_plots(self):
@@ -244,13 +247,13 @@ class AudioGUI(QtWidgets.QMainWindow):
             current_peak = np.max(np.abs(self.audio_buffer[-1000:])) / 32768.0
             self.vu_meter.setValue(int(current_peak * 100))
             
-            # Update waveform
+            # Update waveform: plot last 1000 samples
             self.waveform_curve.setData(self.audio_buffer[-1000:])
             
-            # Update spectrogram
-            f, t, Sxx = spectrogram(self.audio_buffer, fs=44100, nperseg=1024)
+            # Update spectrogram : computed using FFT
+            f, t, Sxx = spectrogram(self.audio_buffer, fs=44100, nperseg=1024) # computes spectrogram from audio buffer
             if Sxx.size > 0:
-                db_scale = 10 * np.log10(Sxx[::4, ::2] + 1e-12)
+                db_scale = 10 * np.log10(Sxx[::4, ::2] + 1e-12) # converts power values to dB
                 self.spectrogram_image.setImage(db_scale.T, levels=(-40, 40))
         except Exception as e:
             print(f"Plotting error: {str(e)}")
@@ -287,6 +290,7 @@ class AudioGUI(QtWidgets.QMainWindow):
         elif text == 'Reset':
             self.send_command("RESET")
             self.pitch_slider.setValue(100)
+            self.reverb_slider.setValue(0)
 
     def toggle_recording(self):
         self.recording = not self.recording
@@ -313,8 +317,8 @@ class AudioGUI(QtWidgets.QMainWindow):
     def send_command(self, cmd):
         if self.serial_port:
             try:
-                self.serial_port.write(f"{cmd}\n".encode())
-                self.serial_port.flush()
+                self.serial_port.write(f"{cmd}\n".encode()) # send command + newline
+                self.serial_port.flush() # immediately transmit data
             except Exception as e:
                 print(f"Send error: {str(e)}")
                 self.status_bar.showMessage("Connection lost!", 5000)
@@ -324,12 +328,13 @@ class AudioGUI(QtWidgets.QMainWindow):
         try:
             if self.serial_port and self.serial_port.in_waiting:
                 data = self.serial_port.read(self.serial_port.in_waiting)
-                
+                # make sure there's an even number of bytes
                 if len(data) % 2 != 0:
                     data = data[:-1]
-                    
                 if len(data) >= 2:
+                    # convert bytes into int16 array
                     audio = np.frombuffer(data, dtype=np.int16)
+                    # update the rolling buffer for plots
                     self.audio_buffer = np.roll(self.audio_buffer, -len(audio))
                     self.audio_buffer[-len(audio):] = audio
                     

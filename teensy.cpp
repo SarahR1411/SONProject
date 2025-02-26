@@ -1,17 +1,14 @@
 #include <Audio.h>
 #include <Wire.h>
-#include <SPI.h>
-#include <SD.h>
-#include <SerialFlash.h>
 
-#define GRANULAR_MEMORY_SIZE 12800
+#define GRANULAR_MEMORY_SIZE 12800 // buffer size for granular effect
 #define SERIAL_BUFFER_SIZE 256
 
 // Audio objects
 AudioInputI2S       micInput;
 AudioEffectGranular granular;
 AudioEffectFreeverb reverb;
-AudioRecordQueue    audioQueue;
+AudioRecordQueue    audioQueue; // buffer for recording audio
 AudioMixer4         mixer;  
 AudioOutputI2S      audioOutput;
 
@@ -57,12 +54,13 @@ void setup() {
 }
 
 void loop() {
+    // send audio data to serial if available
     if (audioQueue.available() >= 1) {
         int16_t *buffer = audioQueue.readBuffer();
         Serial.write((uint8_t*)buffer, audioBlockSize * sizeof(int16_t));
         audioQueue.freeBuffer();
     }
-
+    // process incoming commands 
     if (Serial.available()) {
         String cmd = Serial.readStringUntil('\n');
         handleCommand(cmd);
@@ -88,7 +86,7 @@ void handleCommand(String cmd) {
         granular.setSpeed(1.0);
         granular.beginPitchShift(50.0);
         reverb.roomsize(0.6);
-        x
+        
         // Reset mixer to dry signal only
         mixer.gain(0, 1.0);
         mixer.gain(1, 0.0);
